@@ -413,13 +413,13 @@ institutions2df <- function(data, verbose = TRUE) {
     )
 
     sub_row <- lapply(
-      item[c("international", "geo", "associated_institutions")],
+      item[c("international", "geo")],
       subs_na,
       type = "row_df"
     )
 
     sub_rbind_dfs <- lapply(
-      item[c("counts_by_year", "x_concepts")],
+      item[c("counts_by_year", "associated_institutions", "x_concepts")],
       subs_na,
       type = "rbind_df"
     )
