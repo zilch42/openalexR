@@ -8,6 +8,8 @@
 #' The argument can be one of c("works", "authors", "venues", "institutions", "concepts").
 #' @param abstract Logical. If TRUE, the function returns also the abstract of each item.
 #' Ignored if entity is different from "works". Defaults to TRUE.
+#' @param simplify Logical. If TRUE, default behaviour of only taking first institution
+#' affiliation for each author. If FALSE, duplicate authors with one line for each affiliation.
 #' @inheritParams oa_query
 #' @inheritParams oa_request
 #' @return A tibble/dataframe result of the original OpenAlex result list.
@@ -42,7 +44,7 @@
 #' }
 #'
 #' @export
-oa2df <- function(data, entity, abstract = TRUE, count_only = FALSE, group_by = NULL, verbose = TRUE) {
+oa2df <- function(data, entity, abstract = TRUE, count_only = FALSE, group_by = NULL, verbose = TRUE, simplify = TRUE) {
   if (!is.null(group_by)) {
     return(do.call(rbind.data.frame, data))
   }
@@ -52,12 +54,12 @@ oa2df <- function(data, entity, abstract = TRUE, count_only = FALSE, group_by = 
   }
 
   switch(entity,
-    works = works2df(data, abstract, verbose),
-    authors = authors2df(data, verbose),
-    institutions = institutions2df(data, verbose),
-    venues = venues2df(data, verbose),
-    concepts = concepts2df(data, verbose),
-    snowball = snowball2df(data)
+         works = works2df(data, abstract, verbose, simplify),
+         authors = authors2df(data, verbose),
+         institutions = institutions2df(data, verbose),
+         venues = venues2df(data, verbose),
+         concepts = concepts2df(data, verbose),
+         snowball = snowball2df(data)
   )
 }
 
@@ -113,7 +115,7 @@ oa2df <- function(data, entity, abstract = TRUE, count_only = FALSE, group_by = 
 #'
 #' # @export
 #'
-works2df <- function(data, abstract = TRUE, verbose = TRUE) {
+works2df <- function(data, abstract = TRUE, verbose = TRUE, simplify = TRUE) {
   if (!is.null(data$id)) {
     data <- list(data)
   }
@@ -132,7 +134,7 @@ works2df <- function(data, abstract = TRUE, verbose = TRUE) {
     so_id = "id", so = "display_name", publisher = "publisher",
     url = "url", is_oa = "is_oa"
   )
-  empty_inst <- empty_list(inst_cols)
+  empty_inst <- empty_list(paste0("institution_", inst_cols))
 
   for (i in 1:n) {
     if (verbose) pb$tick()
@@ -171,23 +173,38 @@ works2df <- function(data, abstract = TRUE, verbose = TRUE) {
 
     # authorships and affilitation
     author <- list(do.call(rbind.data.frame, lapply(paper$authorships, function(l) {
-      l_inst <- l$institutions
-      inst_idx <- lengths(l_inst) > 0
-      if (length(inst_idx) > 0 && any(inst_idx)) {
-        first_inst <- l_inst[inst_idx][[1]]
-      } else {
-        first_inst <- empty_inst
-      }
-      first_inst <- prepend(first_inst, "institution")
+
+      # raw address
       aff_raw <- list(au_affiliation_raw = l$raw_affiliation_string[1])
+
+      # author data
       l_author <- l_author <- if (length(l$author) > 0) {
         prepend(l$author, "au")
       } else {
         empty_list(c("au_id", "au_display_name", "au_orcid"))
       }
 
-      c(l_author, l["author_position"], aff_raw, first_inst)
+      # affiliations
+      l_inst <- l$institutions
+      inst_idx <- lengths(l_inst) > 0
+      if (length(inst_idx) > 0 && any(inst_idx)) {
+        all_inst <- l_inst[inst_idx]
+        all_inst <- lapply(all_inst, function(x) prepend(x, "institution"))
+      } else {
+        # return empty if no institutions
+        return(rbind.data.frame(c(l_author, l["author_position"], aff_raw, empty_inst)))
+      }
+
+      # only return first affiliation if simplify = TRUE
+      if (simplify) {
+        c(l_author, l["author_position"], aff_raw, all_inst[[1]])
+      } else {
+        do.call(rbind.data.frame, lapply(all_inst, function(x) {
+          c(l_author, l["author_position"], aff_raw, x)
+        }))
+      }
     })))
+
 
     # Abstract
     if (abstract && !is.na(paper$abstract_inverted_index[1])) {

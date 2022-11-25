@@ -67,7 +67,8 @@ oa_fetch <- function(identifier = NULL, ## identifier of a work, author, venue, 
                      per_page = 200,
                      count_only = FALSE,
                      mailto = oa_email(),
-                     verbose = FALSE) {
+                     verbose = FALSE,
+                     simplify = TRUE) {
   output <- match.arg(output)
   entity <- match.arg(entity, oa_entities())
 
@@ -121,7 +122,7 @@ oa_fetch <- function(identifier = NULL, ## identifier of a work, author, venue, 
       tibble = oa2df(res,
         entity = entity, abstract = abstract,
         count_only = count_only, group_by = group_by,
-        verbose = verbose
+        verbose = verbose, simplify = simplify
       )
     )
   }
